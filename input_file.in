@@ -1,0 +1,14 @@
+LOAD airfoil_data\Eppler E168\Eppler E168.dat
+
+PANE
+OPER
+Visc 500000.0
+Ncrit 9
+PACC
+airfoil_data\Eppler E168\Eppler E168_polar_Re500000.0_Ncrit9.txt
+
+ITER 1000
+ASeq -10 10 0.25
+
+
+quit

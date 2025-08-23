@@ -34,14 +34,17 @@ class Airfoil_Data:
         Re_lo = float(Re_lo)
         Re_hi = float(Re_hi)
 
+
         # --- 2) For each bracketed Re, interpolate in alpha ---
         def interp_at_Re(R):
             subset = self.data[self.data["Re"] == R]
             a_arr = subset["alpha"].to_numpy()
             cl_arr = subset["CL"].to_numpy()
             cd_arr = subset["CD"].to_numpy()
+
             cl_val = np.interp(alpha, a_arr, cl_arr)
             cd_val = np.interp(alpha, a_arr, cd_arr)
+        
             return cl_val, cd_val
 
         cl_lo, cd_lo = interp_at_Re(Re_lo)
@@ -50,10 +53,12 @@ class Airfoil_Data:
         # --- 3) Linearly interpolate in Re ---
         if Re_lo == Re_hi:
             return float(cl_lo), float(cd_lo)
+        
         t = (Re - Re_lo) / (Re_hi - Re_lo)
         cl = cl_lo + t * (cl_hi - cl_lo)
         cd = cd_lo + t * (cd_hi - cd_lo)
         return float(cl), float(cd)
+        
     
 def calc_Re(u, c):
     return (u*c)/kin_vis
@@ -80,14 +85,13 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data):
     Integrate T and Q between r1 and r2.
     Returns (total_T, total_Q).
     """
-    r_vals = np.linspace(blade_geo.hub_diameter/2, blade_geo.od/2, 100)
 
     T_prime_vals = []
     Q_prime_vals = []
 
     airfoil_perf_data_list = []
 
-    for r in r_vals:
+    for r in blade_geo.r_vals:
         T_prime, Q_prime, airfoil_perf_data = get_force_per_unit_length(
             r, blade_geo, airfoil_data
         )
@@ -100,14 +104,17 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data):
     Q_prime_vals = np.array(Q_prime_vals)
 
     # Integrate using trapezoidal rule
-    T = np.trapz(T_prime_vals, r_vals)
-    Q = np.trapz(Q_prime_vals, r_vals)
+    T = np.trapezoid(T_prime_vals, blade_geo.r_vals)
+    Q = np.trapezoid(Q_prime_vals, blade_geo.r_vals)
 
-    return calc_delta_p(T, blade_geo.hub_diameter, blade_geo.od), Q * blade_geo.omega, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_vals
+    avg_delta_p = calc_delta_p(T, blade_geo.hub_diameter, blade_geo.od)
+    power_loss = Q * blade_geo.omega
+
+    return avg_delta_p, power_loss, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, blade_geo.r_vals
 
 def get_force_per_unit_length(r, blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
     w_approx = np.sqrt((blade_geo.omega * r)**2 + blade_geo.v_freestream**2)
-    c = blade_geo.coord_prof(r)
+    c = blade_geo.get_arc_choord(r)
     theta = blade_geo.theta_prof(r)
     Re = calc_Re(w_approx, c)
 
@@ -118,7 +125,6 @@ def get_force_per_unit_length(r, blade_geo: Blade_Geometry, airfoil_data: Airfoi
         cn = cl * np.cos(phi) - cd * np.sin(phi)
         ct = cl*np.sin(phi) + cd * np.cos(phi)
         sigma_prime = (blade_geo.B*c)/(2*np.pi*r)
-
         a = calc_a(phi, sigma_prime, cn, F=1)
         a_prime = calc_a_prime(phi, sigma_prime, ct, F=1)
 
@@ -144,7 +150,7 @@ def get_force_per_unit_length(r, blade_geo: Blade_Geometry, airfoil_data: Airfoi
         )
 
     # Solve
-    phi_star = brentq(R, phi_lower, phi_upper, xtol=1e-8, rtol=1e-8, maxiter=100)
+    phi_star = brentq(R, phi_lower, phi_upper, xtol=1e-8, rtol=1e-8, maxiter=1000)
 
     alpha, cd, cl, cn, ct, sigma_prime, a, a_prime = calc_parameters(phi_star)
     w = np.sqrt((blade_geo.v_freestream * (1+a))**2 + (blade_geo.omega*r*(1-a_prime))**2)
@@ -152,4 +158,4 @@ def get_force_per_unit_length(r, blade_geo: Blade_Geometry, airfoil_data: Airfoi
     T_prime = blade_geo.B * cn * .5 * rho * w**2 * c
     Q_prime = blade_geo.B * (ct * .5 * rho * w**2 * c) * r
 
-    return T_prime, Q_prime, [np.rad2deg(alpha), cd, cl, cn, ct, phi_star, float( calc_Re(w, c))]
+    return T_prime, Q_prime, [np.rad2deg(alpha), cd, cl, cn, ct, phi_star, float(calc_Re(w, c)), c]

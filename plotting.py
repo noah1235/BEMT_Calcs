@@ -2,6 +2,56 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from matplotlib.ticker import ScalarFormatter
+import pandas as pd
+from calcs import calc_Re
+
+def startup(blade_geo, airfoil_data, root):
+    # allocate
+    r_vals      = blade_geo.r_vals
+    n           = len(r_vals)
+    cl_list     = np.zeros(n)
+    cd_list     = np.zeros(n)
+    alpha_list  = np.zeros(n)
+
+    # fill
+    for i, r in enumerate(r_vals):
+        theta = blade_geo.theta_prof(r)         # radians
+        c     = blade_geo.get_arc_choord(r)         # chord [m]
+        alpha = np.rad2deg(theta)                          # assume incidence = alpha
+        u     = r * blade_geo.omega            # local tangential speed
+        Re    = calc_Re(u, c)
+        cl, cd = airfoil_data(Re, alpha)
+
+        cl_list[i]     = cl
+        cd_list[i]     = cd
+        alpha_list[i]  = alpha  
+
+    # plot
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    # 1) alpha vs r
+    axes[0].plot(r_vals, alpha_list, lw=1.5)
+    axes[0].set_xlabel('Radius r [m]')
+    axes[0].set_ylabel('Angle of attack α [°]')
+    axes[0].set_title('α vs. r')
+    axes[0].grid(True)
+
+    # 2) cl vs alpha
+    axes[1].plot(r_vals, cl_list, lw=1.5, color='C1')
+    axes[1].set_xlabel('α [°]')
+    axes[1].set_ylabel('Lift coefficient $C_l$')
+    axes[1].set_title('$C_l$ vs. α')
+    axes[1].grid(True)
+
+    # 3) cd vs alpha
+    axes[2].plot(r_vals, cd_list, lw=1.5, color='C2')
+    axes[2].set_xlabel('α [°]')
+    axes[2].set_ylabel('Drag coefficient $C_d$')
+    axes[2].set_title('$C_d$ vs. α')
+    axes[2].grid(True)
+
+    fig.tight_layout()
+    fig.savefig(os.path.join(root, "startup.png"))
 
 def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, Q_prime_vals, r_vals, save_path):
     airfoil_perf_data = np.array(airfoil_perf_data)
@@ -13,6 +63,17 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, Q_prime_vals, r_vals
     ct_list = airfoil_perf_data[:, 4]
     phi_list = airfoil_perf_data[:, 5]
     Re_list = airfoil_perf_data[:, 6]
+    #choord_list = airfoil_perf_data[:, 7]
+    #phi_deg_list = np.rad2deg(phi_list)
+
+    # Subsample the data
+    num_samples = 20
+    n_total = len(r_vals)
+    if num_samples is None or num_samples >= n_total:
+        indices = np.arange(n_total)
+    else:
+        indices = np.linspace(0, n_total - 1, num_samples, dtype=int)
+
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     axes = axes.ravel()
@@ -38,8 +99,8 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, Q_prime_vals, r_vals
 
     # Cn and Ct together (shared y)
     axes[2].plot(r_vals, cn_list, label="Cn")
-    axes[2].plot(r_vals, cl_list*np.cos(phi_list), label="cl * cos(phi)")
-    axes[2].plot(r_vals, cl_list*np.sin(phi_list), label="cl * sin(phi)")
+    #axes[2].plot(r_vals, cl_list*np.cos(phi_list), label="cl * cos(phi)")
+    #axes[2].plot(r_vals, cl_list*np.sin(phi_list), label="cl * sin(phi)")
     axes[2].plot(r_vals, ct_list, label="Ct")
     axes[2].set_xlabel("Radius [m]")
     axes[2].set_ylabel("Force Coefficient")

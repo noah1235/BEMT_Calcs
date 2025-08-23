@@ -1,0 +1,17 @@
+Fan Parameters
+--------------------
+Airfoil        : Eppler E71
+Ncrit          : 9
+Blades (B)     : 4
+Thickness [m]  : 0.02
+Hub Diameter [m]: 0.085
+Outer Diameter [m]: 0.2
+RPM            : 1300
+Set Angle [deg]: 32.10
+Tip Angle [deg]: 14.00
+Chord Root [m] : 0.042007000056540005
+Chord Tip [m]  : 0.08691322809205497
+Target CFM     : 200
+delta p [Pa]   : 21.41
+efficiency      : 0.67
+

@@ -1,11 +1,11 @@
-LOAD airfoil_data\Eppler E168\Eppler E168.dat
-
+LOAD airfoil_data\RAF 30\RAF 30.dat
+RAF 30
 PANE
 OPER
-Visc 500000.0
+Visc 50000
 Ncrit 9
 PACC
-airfoil_data\Eppler E168\Eppler E168_polar_Re500000.0_Ncrit9.txt
+airfoil_data\RAF 30\RAF 30_polar_Re50000_Ncrit9.txt
 
 ITER 1000
 ASeq -10 10 0.25

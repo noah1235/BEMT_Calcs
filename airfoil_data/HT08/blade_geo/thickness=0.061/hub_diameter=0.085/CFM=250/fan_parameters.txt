@@ -1,0 +1,17 @@
+Fan Parameters
+--------------------
+Airfoil        : HT08
+Ncrit          : 9
+Blades (B)     : 3
+Thickness [m]  : 0.061
+Hub Diameter [m]: 0.085
+Outer Diameter [m]: 0.2
+RPM            : 2734
+Set Angle [deg]: 19.00
+Tip Angle [deg]: 8.32
+Chord Root [m] : 0.0645148615523869
+Chord Tip [m]  : 0.0645148615523869
+Target CFM     : 250
+delta p [Pa]   : 30.00
+efficiency      : 0.64
+

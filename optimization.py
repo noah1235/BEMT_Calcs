@@ -1,16 +1,15 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, Bounds
 from read_xfoil_data import load_all_polars
-from calcs import Airfoil_Data, radial_integration
-from geometry import Blade_Geometry, Max_Chord_Prof, SplineTwistProfile, Linear_Prof
+from calcs import Airfoil_Data, radial_integration, estimate_dp
+from geometry import Blade_Geometry, SplineTwistProfile, Linear_Prof
 from plotting import plot_airfoil_perf_vs_r
 
 # ----------------------------------------------------------------------------
 # Hard-coded final tip twist (radians)
 # ----------------------------------------------------------------------------
-FINAL_TIP_ANGLE = np.deg2rad(14)
+FINAL_TIP_ANGLE = np.deg2rad(13)
 
 # ----------------------------------------------------------------------------
 # Scaling utilities
@@ -26,26 +25,41 @@ def from_unit(u, lb, ub):
 # ----------------------------------------------------------------------------
 def evaluate_performance(vars_raw, CFM, airfoil_data,
                          thickness, hub_d, od,
-                         r_ctrl, final_tip_angle, nblades):
+                         r_ctrl_twist, r_ctrl_t,
+                         final_tip_angle, nblades):
     """
-    vars_raw: [theta_ctrl[0..n_ctrl-2], RPM]
-    r_ctrl: array of length n_ctrl (including tip location)
-    final_tip_angle: scalar
+    vars_raw: concatenated vector
+      [theta_ctrl[0..n_twist-2], thickness_ctrl[0..n_t-1], RPM]
+    The final twist value at the tip is fixed to final_tip_angle.
     """
-    n_ctrl = len(r_ctrl)
-    # separate optimization vars (all but final)
-    theta_raw = vars_raw[:n_ctrl-1]
+    n_twist = len(r_ctrl_twist)
+    n_t = len(r_ctrl_t)
+    assert vars_raw.shape[0] == (n_twist - 1) + n_t + 1, "vars_raw size mismatch."
+
+    # unpack optimization vars
+    i0 = 0
+    i1 = i0 + (n_twist - 1)
+    theta_raw = vars_raw[i0:i1]               # length n_twist - 1
+    i2 = i1 + n_t
+    t_ctrl = vars_raw[i1:i2]                  # length n_t
+
+    RPM = float(vars_raw[-1])
+
     # append hard-coded tip twist
     theta_ctrl = np.concatenate([theta_raw, [final_tip_angle]])
-    RPM = vars_raw[-1]
-    # build profiles
-    twist_prof = SplineTwistProfile(r_ctrl, theta_ctrl,
+
+    # build profiles (reuse spline class for thickness as well)
+    twist_prof = SplineTwistProfile(r_ctrl_twist, theta_ctrl,
                                     kind='pchip', extrapolate=True)
+    t_prof = SplineTwistProfile(r_ctrl_t, t_ctrl,
+                                kind='pchip', extrapolate=True)
+
     blade = Blade_Geometry(
         airfoil_name="",
         Ncrit=9,
         B=nblades,
-        thickness=thickness,
+        max_t=thickness,           # max allowable thickness (cap)
+        thickness_prof=t_prof,     # optimized thickness profile
         hub_diameter=hub_d,
         od=od,
         omega_rpm=RPM,
@@ -53,109 +67,155 @@ def evaluate_performance(vars_raw, CFM, airfoil_data,
         CFM=CFM
     )
 
-    dp, losses, perf_list, *_ = radial_integration(blade, airfoil_data)
-    power = dp * blade.flow_rate + losses
-    efficency = (dp * blade.flow_rate)/power
-    print(f"Δp={dp:.1f} Pa | Power={power:.1f} W | Eff: {efficency} | RPM={RPM:.0f}")
-    return dp, losses, power, efficency
+    dp, power, perf_list, *_ = radial_integration(blade, airfoil_data)
+    p_fluid = dp * blade.flow_rate
+    efficiency = p_fluid / power if power > 0 else 0.0
+
+    print(f"Δp={dp:.2f} Pa | Power={power:.2f} W | Eff={efficiency:.3f} | RPM={RPM:.0f}")
+    return dp, power, efficiency
 
 # ----------------------------------------------------------------------------
-# Optimization with monotonicity and hard tip angle
+# Optimization with monotonicity (twist only) and hard tip angle
 # ----------------------------------------------------------------------------
 def optimize_blade_spline(airfoil_data,
                           hub_d, od,
                           thickness,
                           CFM,
-                          r_ctrl,
+                          r_ctrl_twist,
                           theta_lb,
                           theta_ub,
                           rpm_lb,
                           rpm_ub,
                           dp_reg,
-                          th0,
-                          rpm_const,
-                          nblades
-                          ):
-    n_ctrl = len(r_ctrl)
-    # initial theta excluding final
-    rpm0 = 0.5*(rpm_lb + rpm_ub)
-    x0_raw = np.concatenate([th0, [rpm0]])
+                          th0,           # initial twist controls (length n_twist-1)
+                          t0,            # initial thickness controls (length n_t)
+                          r_ctrl_t,
+                          rpm_const,     # (target_rpm, weight) soft penalty
+                          nblades):
+    n_twist = len(r_ctrl_twist)
+    n_t = len(r_ctrl_t)
 
-    # bounds for optimization vars
-    lb = np.concatenate([np.full(n_ctrl-1, theta_lb), [rpm_lb]])
-    ub = np.concatenate([np.full(n_ctrl-1, theta_ub), [rpm_ub]])
+    # initial guesses (unit-free / original units)
+    rpm0 = 0.5 * (rpm_lb + rpm_ub)
+    x0_raw = np.concatenate([th0, t0, [rpm0]])
+
+    # bounds in ORIGINAL units
+    lb = np.concatenate([
+        np.full(n_twist - 1, theta_lb),      # twist controls (except tip)
+        np.full(n_t, 0.0),                   # thickness controls ∈ [0, thickness]
+        [rpm_lb]
+    ])
+    ub = np.concatenate([
+        np.full(n_twist - 1, theta_ub),
+        np.full(n_t, thickness),
+        [rpm_ub]
+    ])
+
+    # map to unit cube and use [0,1] box constraints for the optimizer
     x0 = to_unit(x0_raw, lb, ub)
-    bounds = Bounds(np.zeros_like(x0), np.ones_like(x0))
+    bounds = Bounds(0.0, 1.0)
 
     def obj_unit(u):
         x = from_unit(u, lb, ub)
-        # reuse evaluate
-        dp, _, P, effiency = evaluate_performance(x, CFM, airfoil_data,
-                                        thickness, hub_d, od,
-                                        r_ctrl, FINAL_TIP_ANGLE, nblades)
-        # Δp penalty
-        p_dp = dp_reg[1]*(dp - dp_reg[0])**2 * 0
 
+        dp, P, efficiency = evaluate_performance(
+            x, CFM, airfoil_data,
+            thickness, hub_d, od,
+            r_ctrl_twist, r_ctrl_t,
+            FINAL_TIP_ANGLE, nblades
+        )
+
+        # pressure-drop soft target penalty: weight*(dp - target)^2
+        p_dp = dp_reg[1] * (dp - dp_reg[0])**2
+
+        # optional RPM soft penalty
         rpm_pen = rpm_const[1] * (rpm_const[0] - x[-1])**2
 
-
-        # monotonicity penalty for theta_raw
+        # monotonic-decreasing penalty for TWIST controls only
         pen = 0.0
-        theta_raw = x[:n_ctrl-1]
-        for i in range(len(theta_raw)-1):
-            diff = theta_raw[i] - theta_raw[i+1]
-            if diff < 0:
+        theta_raw = x[:n_twist - 1]
+        for i in range(len(theta_raw) - 1):
+            diff = theta_raw[i] - theta_raw[i + 1]
+            if diff < 0:  # penalize increases
                 pen += 1e5 * (-diff)**2
-        #return P + p_dp + pen + rpm_pen
-        return -effiency + p_dp + pen
 
-    res = minimize(obj_unit, x0,
-                   method='L-BFGS-B', bounds=bounds,
-                   options={'maxiter':20, 'disp':True})
+        # maximize efficiency -> minimize negative
+        return -efficiency + p_dp + rpm_pen + pen
+
+    res = minimize(
+        obj_unit, x0, method='L-BFGS-B', bounds=bounds,
+        options={'maxiter': 20, 'disp': True}
+    )
 
     sol = from_unit(res.x, lb, ub)
-    res.theta_ctrl_opt = np.concatenate([sol[:n_ctrl-1], [FINAL_TIP_ANGLE]])
-    res.RPM_opt = sol[-1]
+
+    # unpack final solution in ORIGINAL units
+    theta_opt = sol[:n_twist - 1]
+    t_opt = sol[n_twist - 1:n_twist - 1 + n_t]
+    RPM_opt = sol[-1]
+
+    # stash helpful fields on the result object
+    res.theta_ctrl_opt = np.concatenate([theta_opt, [FINAL_TIP_ANGLE]])
+    res.t_ctrl_opt = t_opt
+    res.RPM_opt = float(RPM_opt)
+    res.lb = lb
+    res.ub = ub
     return res
 
 # ----------------------------------------------------------------------------
 # Main entry
 # ----------------------------------------------------------------------------
 def run_opt():
-    df = load_all_polars("airfoil_data/Eppler E71")
+    df = load_all_polars("airfoil_data/Eppler E63")
     af_data = Airfoil_Data(df, Ncrit=9)
 
     hub_d, od = 0.085, 0.20
     nblades = 4
-    thickness = 0.02
-    CFM = 200
-    dp_reg = (20, 1e-1)
-    RPM_reg = (1500, 0)
-    n_spline_ctrl_pts = 3
-    #th0 = np.array([np.deg2rad(30), np.deg2rad(28), np.deg2rad(20)])
-    r_ctrl = np.linspace(hub_d/2, od/2, n_spline_ctrl_pts)
+    thickness = 0.03
+    CFM = 300
 
-    theta_prof = Linear_Prof(np.deg2rad(29), np.deg2rad(20), r_ctrl[0], r_ctrl[-2])
-    th0 = np.zeros(n_spline_ctrl_pts-1)
-    for i, r in enumerate(r_ctrl[:-1]):
-        th0[i] = theta_prof(r)
+    target_dp = estimate_dp(CFM) * 1.25
+    print(f"target delta p = {target_dp:.3f} Pa")
+    dp_reg = (target_dp, 1e-1)      # (target, weight)
+    RPM_reg = (1500.0, 0.0)        # (target, weight) -> 0 disables RPM penalty
 
-    theta_lb, theta_ub = np.deg2rad(0), np.deg2rad(50)
-    rpm_lb, rpm_ub = 1300, 3000
+    n_spline_ctrl_pts_twist = 3
+    t0 = np.array([thickness, thickness/1.5, thickness/4])
+    n_spline_ctrl_pts_t = t0.shape[0]
+
+    r_ctrl_twist = np.linspace(hub_d/2, od/2, n_spline_ctrl_pts_twist)
+    r_ctrl_t = np.linspace(hub_d/2, od/2, n_spline_ctrl_pts_t)
+
+    # initial twist (exclude final tip)
+    theta_prof_init = Linear_Prof(np.deg2rad(33), np.deg2rad(24),
+                                  r_ctrl_twist[0], r_ctrl_twist[-2])
+    th0 = np.zeros(n_spline_ctrl_pts_twist - 1)
+    for i, r in enumerate(r_ctrl_twist[:-1]):
+        th0[i] = theta_prof_init(r)
+
+    # initial thickness controls within [0, thickness]
+
+
+    theta_lb, theta_ub = FINAL_TIP_ANGLE, np.deg2rad(50)
+    rpm_lb, rpm_ub = 1200.0, 1500.0
 
     res = optimize_blade_spline(
         af_data, hub_d, od,
         thickness, CFM,
-        r_ctrl,
+        r_ctrl_twist,
         theta_lb, theta_ub,
         rpm_lb, rpm_ub,
         dp_reg,
         th0,
+        t0,
+        r_ctrl_t,
         rpm_const=RPM_reg,
         nblades=nblades
     )
-    print("Optimized thetas (deg):", np.rad2deg(res.theta_ctrl_opt))
-    print("Optimized thetas (rad):", (res.theta_ctrl_opt))
+
+    print("Optimized twist (deg):", np.rad2deg(res.theta_ctrl_opt))
+    print("Optimized twist (rad):", res.theta_ctrl_opt)
+    print("Optimized thickness ctrls (m):", res.t_ctrl_opt)
     print("Optimized RPM:", int(res.RPM_opt))
 
 if __name__ == '__main__':

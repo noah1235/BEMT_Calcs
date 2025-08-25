@@ -146,32 +146,49 @@ def process_polar(file_path, cl_scale, cd_scale, scale_cdp, new_re):
 
 def main():
     # ======= USER SETTINGS =======
-    folder = pathlib.Path("airfoil_data/Eppler E71")
-    src_re = 5e4
+    folder = pathlib.Path("airfoil_data/Eppler E63")
+    src_re = 50000.0          # keep as float; filenames may encode decimals
     src_ncrit = 9
-    new_re = 1e4
+    new_re = 1e4              # will be formatted nicely with :g below
 
-
-    cl_scale = 0.6    # 10% less lift
-    cd_cl_scale = .5
+    cl_scale = 0.6            # 10% less lift
+    cd_cl_scale = 0.5
     cd_scale = cl_scale / cd_cl_scale
-    scale_cdp = False  # also scale CDp
+    scale_cdp = False         # also scale CDp
     # =============================
 
     for file_path in folder.iterdir():
         if not file_path.is_file():
             continue
-        m = re.match(r"(.+)_polar_Re(\d+)_Ncrit(\d+)", file_path.stem)
+
+        # Allow float/scientific Re; require full stem match
+        m = re.fullmatch(
+            r"(.+)_polar_Re(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)_Ncrit(\d+)",
+            file_path.stem
+        )
         if not m:
             continue
-        name, re_val, ncrit_val = m.groups()
-        re_val, ncrit_val = int(re_val), int(ncrit_val)
-        if re_val != src_re or ncrit_val != src_ncrit:
+
+        name, re_str, ncrit_str = m.groups()
+
+        # Parse types correctly: Re may be '50000.0' or '5e4'
+        re_val = float(re_str)
+        ncrit_val = int(ncrit_str)
+
+        # Compare Re as float (tolerant) and Ncrit as int
+        if abs(re_val - src_re) > 1e-9 or ncrit_val != src_ncrit:
             continue
 
-        header, colhdr, rows = process_polar(file_path, cl_scale, cd_scale, scale_cdp, new_re)
-        new_name = f"{name}_polar_Re{new_re}_Ncrit{ncrit_val}{file_path.suffix}"
+        # Do your processing
+        header, colhdr, rows = process_polar(
+            file_path, cl_scale, cd_scale, scale_cdp, new_re
+        )
+
+        # Use :g to avoid trailing ".0" or scientific when not desired
+        new_stem = f"{name}_polar_Re{new_re:g}_Ncrit{ncrit_val}"
+        new_name = f"{new_stem}{file_path.suffix}"
         out_path = folder / new_name
+
         with open(out_path, "w") as f:
             for ln in header:
                 f.write(ln + "\n")
@@ -179,7 +196,9 @@ def main():
             f.write(colhdr + "\n")
             for ln in rows:
                 f.write(ln + "\n")
+
         print(f"Wrote {out_path}")
+
 
 if __name__ == "__main__":
     main()

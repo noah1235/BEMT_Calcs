@@ -1,7 +1,7 @@
 import numpy as np
 from read_xfoil_data import load_all_polars
-from calcs import Airfoil_Data, radial_integration, calc_Re
-from geometry import Blade_Geometry, Linear_Prof, Max_Chord_Prof, Power_Law_Prof, SplineTwistProfile
+from calcs import Airfoil_Data, radial_integration, calc_Re, estimate_dp
+from geometry import Blade_Geometry, Linear_Prof, Power_Law_Prof, SplineTwistProfile, Const_Thickness
 from plotting import plot_airfoil_perf_vs_r, startup
 import os
 import matplotlib.pyplot as plt
@@ -9,32 +9,34 @@ import pandas as pd
 
 #blade geo
 hub_diameter = .085 #m
-thickness = .02 #m
+thickness = .03 #m
 od = .2 #m
 
-#set_angle = np.deg2rad(35.8) # rads
-#end_angle = np.deg2rad(10)
-#theta_prof = Linear_Prof(set_angle, end_angle, hub_diameter/2, od/2)
-#theta_prof = Power_Law_Prof(set_angle, end_angle, hub_diameter/2, od/2, 1.4)
-
 theta_ctrl = np.array(
-    #[np.deg2rad(29), np.deg2rad(26.5), np.deg2rad(19), np.deg2rad(8)]
-    [0.56025013, 0.39640558, 0.2443461 ]
+    [0.55868251, 0.44098458, 0.2268928 ]
     )
-r_ctrl = np.linspace(hub_diameter/2, od/2, theta_ctrl.shape[0])
-theta_prof = SplineTwistProfile(r_ctrl, theta_ctrl,
+t_ctrl = np.array(
+        [0.02993555, 0.02513032, 0.00484464]
+                  )
+
+r_ctrl_theta = np.linspace(hub_diameter/2, od/2, theta_ctrl.shape[0])
+theta_prof = SplineTwistProfile(r_ctrl_theta, theta_ctrl,
                                     kind='pchip', extrapolate=False)
 
-chord_prof = Max_Chord_Prof(theta_prof, thickness)
+r_ctrl_t = np.linspace(hub_diameter/2, od/2, t_ctrl.shape[0])
+t_prof = SplineTwistProfile(r_ctrl_t, t_ctrl,
+                                    kind='pchip', extrapolate=False)
+
 
 blade_geo = Blade_Geometry(
-    airfoil_name="Eppler E71",
+    airfoil_name="Eppler E63",
     Ncrit=9,
     B=4,
-    thickness=thickness,
+    thickness_prof=t_prof,
+    max_t=thickness,
     hub_diameter=hub_diameter,
     od=od,
-    omega_rpm=1300,
+    omega_rpm=1397,
     theta_prof=theta_prof,
     CFM = -1
 )
@@ -87,7 +89,7 @@ def save_fan_parameters(blade_geo, CFM, delta_p, eff, save_path):
 Airfoil        : {blade_geo.airfoil_name}
 Ncrit          : {blade_geo.Ncrit}
 Blades (B)     : {blade_geo.B}
-Thickness [m]  : {blade_geo.thickness}
+Thickness [m]  : {blade_geo.max_t}
 Hub Diameter [m]: {blade_geo.hub_diameter}
 Outer Diameter [m]: {blade_geo.od}
 RPM            : {blade_geo.omega_rpm}
@@ -109,12 +111,9 @@ def generate_fan_curve(root, CFM_list=np.linspace(100, 300, 10)
     efficency_list = []
     for CFM in CFM_list:
         blade_geo.set_CFM(CFM)
-        delta_p, prof_losses, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list = radial_integration(blade_geo, airfoil_data)
+        delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list = radial_integration(blade_geo, airfoil_data)
         delta_p_list.append(delta_p)
-        p_fluid = delta_p * blade_geo.flow_rate
-        p_tot = p_fluid + prof_losses
-        eff = p_fluid/p_tot
-        efficency_list.append(eff)
+        efficency_list.append(efficency)
     
     fig, ax1 = plt.subplots()
 
@@ -141,7 +140,8 @@ def generate_fan_curve(root, CFM_list=np.linspace(100, 300, 10)
     plt.close()
 
 def fan_calc_ctrl(opt_CFM = 200):
-    root = os.path.join(airfoil_path, f"blade_geo", f"nblades={blade_geo.B}", f"thickness={blade_geo.thickness}", f"hub_diameter={blade_geo.hub_diameter}", f"target_CFM={opt_CFM}")
+
+    root = os.path.join(airfoil_path, f"blade_geo", f"nblades={blade_geo.B}", f"thickness={blade_geo.max_t}", f"hub_diameter={blade_geo.hub_diameter}", f"target_CFM={opt_CFM}")
     run_single_CFM(opt_CFM, root)
     startup(blade_geo, airfoil_data, root)
     generate_fan_curve(root)
@@ -152,16 +152,13 @@ def fan_calc_ctrl(opt_CFM = 200):
 
 def run_single_CFM(CFM, root):
     blade_geo.set_CFM(CFM)
-    delta_p, prof_losses, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list = radial_integration(blade_geo, airfoil_data)
-    print(r_list[0])
-    p_fluid = delta_p * blade_geo.flow_rate
-    p_tot = p_fluid + prof_losses
-    eff = p_fluid/(p_fluid + prof_losses)
-    print(f"delta p: {delta_p} | power: {p_tot} | eff: {eff}")
+    delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list = radial_integration(blade_geo, airfoil_data)
+
+    print(f"delta p: {delta_p} | power: {power} | eff: {efficency}")
     
     os.makedirs(root, exist_ok=True)
     plot_airfoil_perf_vs_r(airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list, root)
-    save_fan_parameters(blade_geo, CFM, delta_p, eff, root)
+    save_fan_parameters(blade_geo, CFM, delta_p, efficency, root)
 
 
     

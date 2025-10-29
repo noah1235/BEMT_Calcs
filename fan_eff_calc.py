@@ -9,14 +9,14 @@ import pandas as pd
 
 #blade geo
 hub_diameter = .085 #m
-thickness = .03 #m
+thickness = .02 #m
 od = .2 #m
 
 theta_ctrl = np.array(
-    [0.55868251, 0.44098458, 0.2268928 ]
+    [0.74487614, 0.62895327, 0.34906585]
     )
 t_ctrl = np.array(
-        [0.02993555, 0.02513032, 0.00484464]
+        [0.02293189, 0.01923077, 0.01923077]
                   )
 
 r_ctrl_theta = np.linspace(hub_diameter/2, od/2, theta_ctrl.shape[0])
@@ -31,12 +31,12 @@ t_prof = SplineTwistProfile(r_ctrl_t, t_ctrl,
 blade_geo = Blade_Geometry(
     airfoil_name="Eppler E63",
     Ncrit=9,
-    B=4,
+    B=6,
     thickness_prof=t_prof,
     max_t=thickness,
     hub_diameter=hub_diameter,
     od=od,
-    omega_rpm=1397,
+    omega_rpm=1232,
     theta_prof=theta_prof,
     CFM = -1
 )
@@ -105,7 +105,7 @@ efficiency      : {eff:.2f}
     with open(os.path.join(save_path, "fan_parameters.txt"), "w") as f:
         f.write(param_text)
 
-def generate_fan_curve(root, CFM_list=np.linspace(100, 300, 10)
+def generate_fan_curve(root, CFM_list=np.linspace(100, 300, 20)
                        ):
     delta_p_list = []
     efficency_list = []
@@ -139,7 +139,7 @@ def generate_fan_curve(root, CFM_list=np.linspace(100, 300, 10)
     fig.savefig(os.path.join(root, "fan_curve.png"), dpi=600)
     plt.close()
 
-def fan_calc_ctrl(opt_CFM = 200):
+def fan_calc_ctrl(opt_CFM = 250):
 
     root = os.path.join(airfoil_path, f"blade_geo", f"nblades={blade_geo.B}", f"thickness={blade_geo.max_t}", f"hub_diameter={blade_geo.hub_diameter}", f"target_CFM={opt_CFM}")
     run_single_CFM(opt_CFM, root)
@@ -152,12 +152,12 @@ def fan_calc_ctrl(opt_CFM = 200):
 
 def run_single_CFM(CFM, root):
     blade_geo.set_CFM(CFM)
-    delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list = radial_integration(blade_geo, airfoil_data)
+    delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, vd_vals, r_list = radial_integration(blade_geo, airfoil_data)
 
     print(f"delta p: {delta_p} | power: {power} | eff: {efficency}")
     
     os.makedirs(root, exist_ok=True)
-    plot_airfoil_perf_vs_r(airfoil_perf_data_list, T_prime_vals, Q_prime_vals, r_list, root)
+    plot_airfoil_perf_vs_r(airfoil_perf_data_list, T_prime_vals, vd_vals, r_list, root)
     save_fan_parameters(blade_geo, CFM, delta_p, efficency, root)
 
 

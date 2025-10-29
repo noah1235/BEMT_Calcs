@@ -1,0 +1,17 @@
+Fan Parameters
+--------------------
+Airfoil        : Eppler E63
+Ncrit          : 9
+Blades (B)     : 5
+Thickness [m]  : 0.025
+Hub Diameter [m]: 0.085
+Outer Diameter [m]: 0.2
+RPM            : 1300
+Set Angle [deg]: 34.73
+Tip Angle [deg]: 15.00
+Chord Root [m] : 0.026544207807329617
+Chord Tip [m]  : 0.03637071824525643
+Target CFM     : 200
+delta p [Pa]   : 14.18
+efficiency      : 0.74
+

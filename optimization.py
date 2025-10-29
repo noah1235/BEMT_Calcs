@@ -6,11 +6,12 @@ from calcs import Airfoil_Data, radial_integration, estimate_dp
 from geometry import Blade_Geometry, SplineTwistProfile, Linear_Prof
 from plotting import plot_airfoil_perf_vs_r
 
+thickness_lb_factor = 1.3
+
 # ----------------------------------------------------------------------------
 # Hard-coded final tip twist (radians)
 # ----------------------------------------------------------------------------
-FINAL_TIP_ANGLE = np.deg2rad(13)
-
+FINAL_TIP_ANGLE = np.deg2rad(20)
 # ----------------------------------------------------------------------------
 # Scaling utilities
 # ----------------------------------------------------------------------------
@@ -19,7 +20,6 @@ def to_unit(x, lb, ub):
 
 def from_unit(u, lb, ub):
     return lb + u * (ub - lb)
-
 # ----------------------------------------------------------------------------
 # Performance evaluation
 # ----------------------------------------------------------------------------
@@ -102,7 +102,7 @@ def optimize_blade_spline(airfoil_data,
     # bounds in ORIGINAL units
     lb = np.concatenate([
         np.full(n_twist - 1, theta_lb),      # twist controls (except tip)
-        np.full(n_t, 0.0),                   # thickness controls ∈ [0, thickness]
+        np.full(n_t, thickness/thickness_lb_factor),                   # thickness controls ∈ [0, thickness]
         [rpm_lb]
     ])
     ub = np.concatenate([
@@ -144,7 +144,7 @@ def optimize_blade_spline(airfoil_data,
 
     res = minimize(
         obj_unit, x0, method='L-BFGS-B', bounds=bounds,
-        options={'maxiter': 20, 'disp': True}
+        options={'maxiter': 50, 'disp': True}
     )
 
     sol = from_unit(res.x, lb, ub)
@@ -170,9 +170,9 @@ def run_opt():
     af_data = Airfoil_Data(df, Ncrit=9)
 
     hub_d, od = 0.085, 0.20
-    nblades = 4
-    thickness = 0.03
-    CFM = 300
+    nblades = 6
+    thickness = 0.025
+    CFM = 250
 
     target_dp = estimate_dp(CFM) * 1.25
     print(f"target delta p = {target_dp:.3f} Pa")
@@ -180,14 +180,14 @@ def run_opt():
     RPM_reg = (1500.0, 0.0)        # (target, weight) -> 0 disables RPM penalty
 
     n_spline_ctrl_pts_twist = 3
-    t0 = np.array([thickness, thickness/1.5, thickness/4])
+    t0 = np.array([thickness/1.1, thickness/1.1, thickness/1.1])
     n_spline_ctrl_pts_t = t0.shape[0]
 
     r_ctrl_twist = np.linspace(hub_d/2, od/2, n_spline_ctrl_pts_twist)
     r_ctrl_t = np.linspace(hub_d/2, od/2, n_spline_ctrl_pts_t)
 
     # initial twist (exclude final tip)
-    theta_prof_init = Linear_Prof(np.deg2rad(33), np.deg2rad(24),
+    theta_prof_init = Linear_Prof(np.deg2rad(33), np.deg2rad(20),
                                   r_ctrl_twist[0], r_ctrl_twist[-2])
     th0 = np.zeros(n_spline_ctrl_pts_twist - 1)
     for i, r in enumerate(r_ctrl_twist[:-1]):
@@ -197,7 +197,7 @@ def run_opt():
 
 
     theta_lb, theta_ub = FINAL_TIP_ANGLE, np.deg2rad(50)
-    rpm_lb, rpm_ub = 1200.0, 1500.0
+    rpm_lb, rpm_ub = 1100.0, 1400.0
 
     res = optimize_blade_spline(
         af_data, hub_d, od,

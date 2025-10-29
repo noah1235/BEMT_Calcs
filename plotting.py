@@ -53,7 +53,7 @@ def startup(blade_geo, airfoil_data, root):
     fig.tight_layout()
     fig.savefig(os.path.join(root, "startup.png"))
 
-def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, Q_prime_vals, r_vals, save_path):
+def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, save_path):
     airfoil_perf_data = np.array(airfoil_perf_data)
     
     alpha_list = airfoil_perf_data[:, 0]
@@ -113,12 +113,12 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, Q_prime_vals, r_vals
     ax4 = ax3.twinx()
 
     p3, = ax3.plot(r_vals, T_prime_vals, color='tab:green', label="T'")
-    p4, = ax4.plot(r_vals, Q_prime_vals, color='tab:purple', label="Q'")
+    p4, = ax4.plot(r_vals, vd_vals, color='tab:purple', label="vd'")
 
     ax3.set_xlabel("Radius [m]")
     ax3.set_ylabel("T'", color='tab:green')
-    ax4.set_ylabel("Q'", color='tab:purple')
-    ax3.set_title("T' and Q' vs Radius")
+    ax4.set_ylabel("axial velocity'", color='tab:purple')
+    ax3.set_title("T' and vd' vs Radius")
     ax3.tick_params(axis='y', labelcolor='tab:green')
     ax4.tick_params(axis='y', labelcolor='tab:purple')
     ax3.grid(True)

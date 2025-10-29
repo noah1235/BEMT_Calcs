@@ -107,6 +107,7 @@ def calc_a_prime(phi: float, sigma_prime: float, ct: float, F: float = 1) -> flo
     return 1 / (t1 + 1)
 
 
+
 def calc_delta_p(T: float, hub_diameter: float, od: float) -> float:
     """
     Average pressure rise from total thrust T over an annular area proxy (kept as-is).
@@ -135,27 +136,35 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
         The corresponding radii used for integration.
     """
     T_prime_vals = []
+    p_prime_vals = []
     Q_prime_vals = []
+    vd_list = []
     airfoil_perf_data_list = []
 
     # Loop over radial stations (kept in the same order)
     for r in blade_geo.r_vals:
-        T_prime, Q_prime, airfoil_perf_data = get_force_per_unit_length(r, blade_geo, airfoil_data)
+        T_prime, Q_prime, v_d, a, airfoil_perf_data = get_force_per_unit_length(r, blade_geo, airfoil_data)
         airfoil_perf_data_list.append(airfoil_perf_data)
         T_prime_vals.append(float(T_prime))
         Q_prime_vals.append(float(Q_prime))
+        p_prime_vals.append(float(v_d*T_prime))
+        vd_list.append(float(a))
 
     T_prime_vals = np.array(T_prime_vals)
     Q_prime_vals = np.array(Q_prime_vals)
+    vd_list = np.array(vd_list)
 
-    T = np.trapezoid(T_prime_vals, blade_geo.r_vals)  # noqa: F821
-    Q = np.trapezoid(Q_prime_vals, blade_geo.r_vals)  # noqa: F821
+    T = np.trapezoid(T_prime_vals, blade_geo.r_vals)
+    Q = np.trapezoid(Q_prime_vals, blade_geo.r_vals)
+    flow_power = np.trapezoid(p_prime_vals, blade_geo.r_vals)
 
     avg_delta_p = calc_delta_p(T, blade_geo.hub_diameter, blade_geo.od)
-    power = Q * blade_geo.omega
-    efficency = (blade_geo.flow_rate * avg_delta_p)/power
+    fan_power = Q * blade_geo.omega
+    efficiency = (flow_power)/fan_power
 
-    return avg_delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, Q_prime_vals, blade_geo.r_vals
+    #print(flow_power, blade_geo.flow_rate * avg_delta_p)
+
+    return avg_delta_p, fan_power, efficiency, airfoil_perf_data_list, T_prime_vals, vd_list, blade_geo.r_vals
 
 
 def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
@@ -183,11 +192,13 @@ def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data:
         for a given inflow angle phi.
         """
         alpha = theta - phi  # radians
+
         cl, cd = airfoil_data(Re, np.rad2deg(alpha))  # airfoil table expects degrees
 
         # Force coefficients resolved along normal (cn) and tangential (ct) directions
         cn = cl * np.cos(phi) - cd * np.sin(phi)
         ct = cl * np.sin(phi) + cd * np.cos(phi)
+
 
         # Local solidity
         sigma_prime = (blade_geo.B * c) / (2 * np.pi * r)
@@ -223,16 +234,17 @@ def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data:
 
     # Recompute parameters at solution
     alpha, cd, cl, cn, ct, sigma_prime, a, a_prime = calc_parameters(phi_star)
-
+    vd = blade_geo.v_freestream * (1 + a)
+    #print(a_prime)
     # Relative speed including induction factors (kept exactly as provided)
-    w = np.sqrt((blade_geo.v_freestream * (1 + a))**2 + (blade_geo.omega * r * (1 - a_prime))**2)
+    w = np.sqrt(vd**2 + (blade_geo.omega * r * (1 - a_prime))**2)
 
     # Per-span thrust and torque (multiplied by number of blades B)
     T_prime = blade_geo.B * cn * 0.5 * rho * w**2 * c
     Q_prime = blade_geo.B * (ct * 0.5 * rho * w**2 * c) * r
 
     # Diagnostics vector (kept as the same ordering/content)
-    return T_prime, Q_prime, [
+    return T_prime, Q_prime, vd, a, [
         np.rad2deg(alpha),  # alpha in degrees
         cd,
         cl,

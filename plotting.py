@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os
 from matplotlib.ticker import ScalarFormatter
 import pandas as pd
-from calcs import calc_Re
+from SRC.Calculations.BEMT_Calcs import calc_Re
 
 def startup(blade_geo, airfoil_data, root):
     # allocate
@@ -16,7 +16,7 @@ def startup(blade_geo, airfoil_data, root):
     # fill
     for i, r in enumerate(r_vals):
         theta = blade_geo.theta_prof(r)         # radians
-        c     = blade_geo.get_arc_choord(r)         # chord [m]
+        c     = blade_geo.get_arc_chord(r)         # chord [m]
         alpha = np.rad2deg(theta)                          # assume incidence = alpha
         u     = r * blade_geo.omega            # local tangential speed
         Re    = calc_Re(u, c)
@@ -63,7 +63,7 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, sav
     ct_list = airfoil_perf_data[:, 4]
     phi_list = airfoil_perf_data[:, 5]
     Re_list = airfoil_perf_data[:, 6]
-    #choord_list = airfoil_perf_data[:, 7]
+    #chord_list = airfoil_perf_data[:, 7]
     #phi_deg_list = np.rad2deg(phi_list)
 
     # Subsample the data

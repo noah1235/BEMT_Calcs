@@ -1,270 +1,7 @@
-from unit_conversion import *
+from SRC.unit_conversion import RPM_2_rad_s, CFM_2_m3_s
+from SRC.Geometry.TE_LE_profiles import Straight_LE_Sweep, Max_Width_TE_prof
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import CubicSpline, PchipInterpolator
-
-
-def central_angle(P, Q, center=(0.0, 0.0), signed=False, degrees=False):
-    """
-    Compute the central angle at 'center' between points P and Q lying on a circle.
-
-    Parameters
-    ----------
-    P, Q : array_like shape (2,)
-        Endpoints on the circle, [x, y].
-    center : array_like shape (2,), optional
-        Circle center (default: (0, 0)).
-    signed : bool, optional
-        If True, return signed CCW-positive angle in (-π, π].
-        If False, return the absolute angle in [0, π].
-    degrees : bool, optional
-        If True, return angle in degrees; otherwise in radians.
-
-    Returns
-    -------
-    float
-        Central angle between P and Q at 'center'.
-    """
-    P = np.asarray(P, dtype=float)
-    Q = np.asarray(Q, dtype=float)
-    C = np.asarray(center, dtype=float)
-
-    # Vectors from center to points
-    u = P - C
-    v = Q - C
-
-    # atan2(||u×v||, u·v) is numerically stable and independent of radius
-    cross = u[0] * v[1] - u[1] * v[0]
-    dot = u[0] * v[0] + u[1] * v[1]
-    theta = np.arctan2(cross, dot)  # signed angle in (-π, π]
-
-    ang = theta if signed else np.abs(theta)  # enforce nonnegative if requested
-    return np.degrees(ang) if degrees else ang
-
-
-def Straight_LE_Sweep(r: float) -> tuple[float, float]:
-    """
-    Simple leading-edge param: straight line in y, zero x-offset.
-
-    Parameters
-    ----------
-    r : float
-        Radius/station.
-
-    Returns
-    -------
-    (x_LE, y_LE) : tuple[float, float]
-    """
-    return 0.0, r
-
-class Const_Thickness:
-    def __init__(self, t):
-        self.t = t
-    
-    def __call__(self, r):
-        return self.t
-        
-
-class Max_Width_TE_prof:
-    """
-    Trailing-edge profile that attempts to maximize projected width subject to a cap.
-
-    Notes
-    -----
-    - 'R' is retained (not used) to avoid changing the original API.
-    - Uses thickness 't' and local blade angle 'theta_prof(r)' to limit width p.
-    - Returns (x, y, z) with z being the axial thickness contribution p*sin(theta).
-    """
-    def __init__(self, R, t_prof, theta_prof, LE_prof, max_p: float):
-        self.R = R          # retained for API compatibility
-        self.t_prof = t_prof
-        self.theta_prof = theta_prof
-        self.LE_prof = LE_prof
-        self.max_angle = np.deg2rad(50)  # retained; not used downstream
-        self.max_p = max_p
-
-    def __call__(self, r: float) -> tuple[float, float, float]:
-        theta = self.theta_prof(r)
-        # Max projected width based on thickness and user-specified cap
-        t = self.t_prof(r)
-        p = min(t / np.sin(theta), self.max_p)
-
-        # LE position (x_LE, y_LE) retained for compatibility (not used directly here)
-        x_LE, y_LE = self.LE_prof(r)
-
-        # Geometry for a circle projection at radius r
-        x = (p / (2 * r)) * np.sqrt(4 * r**2 - p**2)
-        y = r - (p**2 / (2 * r))
-        z = p * np.sin(theta)
-
-        return x, y, z
-
-
-def plot_tip_arc_center0(
-    ax: plt.Axes,
-    TE_tip, LE_tip,
-    blade_color: str = 'k',
-    lw: float = 1.5,
-    n: int = 200,
-    center: tuple[float, float] = (0.0, 0.0),
-    r: float | None = None,
-    use_outer_radius: bool = True,
-    prefer_major: bool = False,
-    force_semicircle: bool = False
-):
-    """
-    Draw a circular arc centered at `center` connecting the blade tip between LE and TE.
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes
-        Target axes.
-    TE_tip, LE_tip : array_like shape (2,)
-        Tip endpoints for trailing and leading edges.
-    blade_color : str
-        Line color.
-    lw : float
-        Line width.
-    n : int
-        Number of sample points along the arc.
-    center : tuple[float, float]
-        Center of the arc/circle.
-    r : float or None
-        Fixed radius to use. If None, uses either max or mean of endpoint radii.
-    use_outer_radius : bool
-        If r is None, choose max (True) or mean (False) of endpoint radii.
-    prefer_major : bool
-        Use the major arc instead of the minor arc if True.
-    force_semicircle : bool
-        If True, draws exactly a 180° cap centered on the mid-angle (endpoints
-        may not pass exactly through TE/LE unless diametrically opposite).
-    """
-    TE_tip = np.asarray(TE_tip, dtype=float)
-    LE_tip = np.asarray(LE_tip, dtype=float)
-    cx, cy = center
-
-    # Shift coordinates so circle center is origin
-    TE0 = TE_tip - np.array([cx, cy])
-    LE0 = LE_tip - np.array([cx, cy])
-
-    # Endpoint radii
-    r_TE = np.hypot(TE0[0], TE0[1])
-    r_LE = np.hypot(LE0[0], LE0[1])
-    if r is None:
-        r = max(r_TE, r_LE) if use_outer_radius else 0.5 * (r_TE + r_LE)
-
-    # Endpoint angles
-    th_TE = np.arctan2(TE0[1], TE0[0])
-    th_LE = np.arctan2(LE0[1], LE0[0])
-
-    def wrap_pi(a: float) -> float:
-        # Wrap to (-π, π]
-        return (a + np.pi) % (2 * np.pi) - np.pi
-
-    if force_semicircle:
-        # Compute mid-angle using unit vector average for stability near wrap-around
-        u_TE = TE0 / (r_TE + 1e-12)
-        u_LE = LE0 / (r_LE + 1e-12)
-        u_mid = u_TE + u_LE
-        th_mid = th_TE if np.allclose(u_mid, 0.0) else np.arctan2(u_mid[1], u_mid[0])
-        th_start = th_mid - np.pi / 2
-        th_end = th_mid + np.pi / 2
-        th = np.linspace(th_start, th_end, n)
-    else:
-        # Connect TE -> LE along chosen arc (minor by default, major if requested)
-        dtheta = wrap_pi(th_LE - th_TE)
-        if prefer_major:
-            # Flip to the longer path
-            dtheta = dtheta - 2 * np.pi if dtheta >= 0 else dtheta + 2 * np.pi
-        th = th_TE + np.linspace(0.0, dtheta, n)
-
-    x = cx + r * np.cos(th)
-    y = cy + r * np.sin(th)
-    ax.plot(x, y, color=blade_color, lw=lw)
-
-
-class Linear_Prof:
-    """
-    Linear profile in r: y(r) = m r + b with y(r1)=y1, y(r2)=y2.
-    """
-    def __init__(self, y1: float, y2: float, r1: float, r2: float):
-        self.start = y1
-        self.end = y2
-
-        self.m = (y2 - y1) / (r2 - r1)
-        self.b = y1 - self.m * r1
-
-    def __call__(self, r: float | np.ndarray) -> float | np.ndarray:
-        return self.m * r + self.b
-
-
-class Power_Law_Prof:
-    """
-    Power-law profile in normalized radius:
-    y(r) = start + (end - start) * ((r - r1)/(r2 - r1))**p
-    """
-    def __init__(self, y1: float, y2: float, r1: float, r2: float, p: float):
-        self.start = y1
-        self.end = y2
-        self.r1 = r1
-        self.r2 = r2
-        self.p = p
-
-    def __call__(self, r: float | np.ndarray) -> float | np.ndarray:
-        return self.start + (self.end - self.start) * ((r - self.r1) / (self.r2 - self.r1)) ** self.p
-
-
-class SplineTwistProfile:
-    """
-    A flexible twist profile defined by control points (r, theta),
-    implemented via CubicSpline or PCHIP (monotone shape-preserving).
-    """
-    def __init__(
-        self,
-        r_ctrl,
-        theta_ctrl,
-        *,
-        kind: str = 'cubic',
-        extrapolate: bool = True
-    ):
-        """
-        Parameters
-        ----------
-        r_ctrl : array_like
-            Radii of control points, strictly increasing.
-        theta_ctrl : array_like
-            Twist angles (radians) at each control radius.
-        kind : {'cubic', 'pchip'}
-            'cubic' uses CubicSpline; 'pchip' uses PchipInterpolator.
-        extrapolate : bool
-            If True, allow extrapolation outside the control range.
-        """
-        self.start = theta_ctrl[0]
-        self.end = theta_ctrl[-1]
-
-        r_ctrl = np.asarray(r_ctrl)
-        theta_ctrl = np.asarray(theta_ctrl)
-        if r_ctrl.ndim != 1 or theta_ctrl.ndim != 1:
-            raise ValueError("r_ctrl and theta_ctrl must be 1D arrays.")
-        if len(r_ctrl) != len(theta_ctrl):
-            raise ValueError("r_ctrl and theta_ctrl must have same length.")
-        #if np.any(np.diff(r_ctrl) <= 0):
-        #    raise ValueError("r_ctrl must be strictly increasing.")
-
-        if kind == 'cubic':
-            # Natural boundary conditions by default
-            self._spline = CubicSpline(r_ctrl, theta_ctrl, extrapolate=extrapolate)
-        elif kind == 'pchip':
-            self._spline = PchipInterpolator(r_ctrl, theta_ctrl, extrapolate=extrapolate)
-        else:
-            raise ValueError("kind must be 'cubic' or 'pchip'")
-
-        self.r_min, self.r_max = r_ctrl[0], r_ctrl[-1]
-
-    def __call__(self, r: float | np.ndarray) -> float | np.ndarray:
-        """Evaluate twist angle at r (scalar or array)."""
-        return self._spline(r)
-
 
 class Blade_Geometry:
     """
@@ -290,13 +27,12 @@ class Blade_Geometry:
         self.hub_diameter = hub_diameter
         self.od = od
         self.omega_rpm = omega_rpm
-        self.omega = RPM_2_rad_s(omega_rpm)  # external helper
+        self.omega = RPM_2_rad_s(omega_rpm)
         self.theta_prof = theta_prof
         self.LE_prof = Straight_LE_Sweep
 
-        # Max projected width cap (retained as provided)
-        max_p = 0.1
-        self.TE_prof = Max_Width_TE_prof(od / 2, thickness_prof, self.theta_prof, self.LE_prof, max_p=max_p)
+
+        self.TE_prof = Max_Width_TE_prof(od / 2, thickness_prof, self.theta_prof, self.LE_prof)
 
         # Flow specification
         self.set_CFM(CFM)
@@ -304,9 +40,8 @@ class Blade_Geometry:
         # Radial grids
         self.r_vals = np.linspace(hub_diameter / 2, od / 2, 200)
 
-        # Endpoint arc "choord" (retained spelling)
-        self.choord_start = self.get_arc_choord(hub_diameter / 2)
-        self.choord_end = self.get_arc_choord(od / 2)
+        self.chord_start = self.get_arc_chord(hub_diameter / 2)
+        self.chord_end = self.get_arc_chord(od / 2)
 
     def set_CFM(self, CFM: float) -> None:
         """
@@ -315,7 +50,7 @@ class Blade_Geometry:
         self.flow_rate = CFM_2_m3_s(CFM)   # external helper
         self.v_freestream = self.flow_rate / self.od**2
 
-    def get_arc_choord(self, r: float) -> float:
+    def get_arc_chord(self, r: float) -> float:
         """
         Compute arc length between LE and TE at radius r by central angle.
 
@@ -340,8 +75,6 @@ class Blade_Geometry:
         return arc_len
 
     # -------------------- FIRST plot_side_view_on_ax (kept, but overridden later) --------------------
-    # This method references self.coord_prof (which is not defined) and would error if called.
-    # It is kept *verbatim* to avoid changing behavior; Python will use the second definition below.
     def plot_side_view_on_ax(self, ax, body_color='k', num_radial=100, blade_color='C0'):
         """
         Side view (deprecated/overridden). Retained to avoid changing behavior.
@@ -516,7 +249,7 @@ class Blade_Geometry:
             # Close the tip with an arc centered at origin
             TE_tip = TE_r[-1]
             LE_tip = LE_r[-1]
-            plot_tip_arc_center0(
+            self.plot_tip_arc_center0(
                 ax,
                 TE_tip,
                 LE_tip,
@@ -540,3 +273,88 @@ class Blade_Geometry:
         ax.set_title(f'Front view: {self.B} blades', fontsize=12, fontweight='bold')
         ax.grid(True, linestyle='--', alpha=0.6)
         ax.tick_params(axis='both', which='major', labelsize=9)
+
+    @staticmethod
+    def plot_tip_arc_center0(
+        ax: plt.Axes,
+        TE_tip, LE_tip,
+        blade_color: str = 'k',
+        lw: float = 1.5,
+        n: int = 200,
+        center: tuple[float, float] = (0.0, 0.0),
+        r: float | None = None,
+        use_outer_radius: bool = True,
+        prefer_major: bool = False,
+        force_semicircle: bool = False
+    ):
+        """
+        Draw a circular arc centered at `center` connecting the blade tip between LE and TE.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Target axes.
+        TE_tip, LE_tip : array_like shape (2,)
+            Tip endpoints for trailing and leading edges.
+        blade_color : str
+            Line color.
+        lw : float
+            Line width.
+        n : int
+            Number of sample points along the arc.
+        center : tuple[float, float]
+            Center of the arc/circle.
+        r : float or None
+            Fixed radius to use. If None, uses either max or mean of endpoint radii.
+        use_outer_radius : bool
+            If r is None, choose max (True) or mean (False) of endpoint radii.
+        prefer_major : bool
+            Use the major arc instead of the minor arc if True.
+        force_semicircle : bool
+            If True, draws exactly a 180° cap centered on the mid-angle (endpoints
+            may not pass exactly through TE/LE unless diametrically opposite).
+        """
+        TE_tip = np.asarray(TE_tip, dtype=float)
+        LE_tip = np.asarray(LE_tip, dtype=float)
+        cx, cy = center
+
+        # Shift coordinates so circle center is origin
+        TE0 = TE_tip - np.array([cx, cy])
+        LE0 = LE_tip - np.array([cx, cy])
+
+        # Endpoint radii
+        r_TE = np.hypot(TE0[0], TE0[1])
+        r_LE = np.hypot(LE0[0], LE0[1])
+        if r is None:
+            r = max(r_TE, r_LE) if use_outer_radius else 0.5 * (r_TE + r_LE)
+
+        # Endpoint angles
+        th_TE = np.arctan2(TE0[1], TE0[0])
+        th_LE = np.arctan2(LE0[1], LE0[0])
+
+        def wrap_pi(a: float) -> float:
+            # Wrap to (-π, π]
+            return (a + np.pi) % (2 * np.pi) - np.pi
+
+        if force_semicircle:
+            # Compute mid-angle using unit vector average for stability near wrap-around
+            u_TE = TE0 / (r_TE + 1e-12)
+            u_LE = LE0 / (r_LE + 1e-12)
+            u_mid = u_TE + u_LE
+            th_mid = th_TE if np.allclose(u_mid, 0.0) else np.arctan2(u_mid[1], u_mid[0])
+            th_start = th_mid - np.pi / 2
+            th_end = th_mid + np.pi / 2
+            th = np.linspace(th_start, th_end, n)
+        else:
+            # Connect TE -> LE along chosen arc (minor by default, major if requested)
+            dtheta = wrap_pi(th_LE - th_TE)
+            if prefer_major:
+                # Flip to the longer path
+                dtheta = dtheta - 2 * np.pi if dtheta >= 0 else dtheta + 2 * np.pi
+            th = th_TE + np.linspace(0.0, dtheta, n)
+
+        x = cx + r * np.cos(th)
+        y = cy + r * np.sin(th)
+        ax.plot(x, y, color=blade_color, lw=lw)
+
+

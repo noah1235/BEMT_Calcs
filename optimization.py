@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, Bounds
 from read_xfoil_data import load_all_polars
-from calcs import Airfoil_Data, radial_integration, estimate_dp
-from geometry import Blade_Geometry, SplineTwistProfile, Linear_Prof
+from SRC.Calculations.BEMT_Calcs import Airfoil_Data, radial_integration, estimate_dp
+from SRC.Geometry.geometry import Blade_Geometry, SplineTwistProfile, Linear_Prof
 from plotting import plot_airfoil_perf_vs_r
 
 thickness_lb_factor = 1.3

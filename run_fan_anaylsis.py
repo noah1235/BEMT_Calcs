@@ -72,7 +72,6 @@ def tabulate_geo(save_path):
 
     # Preallocate arrays for sampled quantities
     arc_chord = np.zeros_like(r_vals)
-    lin_chord = np.zeros_like(r_vals)
     twist     = np.zeros_like(r_vals)
     x_LE_list = np.zeros_like(r_vals)
     y_LE_list = np.zeros_like(r_vals)
@@ -87,9 +86,6 @@ def tabulate_geo(save_path):
         x_LE, y_LE = blade_geo.LE_prof(r)
         x_TE, y_TE, z_TE = blade_geo.TE_prof(r)
 
-        # Linear chord length from endpoints (3D distance using z_TE)
-        lin_chord[i] = np.sqrt((x_LE - x_TE) ** 2 + (y_LE - y_TE) ** 2 + z_TE ** 2)
-
         # Local twist (convert to degrees for table)
         twist[i] = np.rad2deg(blade_geo.theta_prof(r))
 
@@ -101,8 +97,7 @@ def tabulate_geo(save_path):
     df = pd.DataFrame({
         "radius [m]": r_vals,
         "twist [deg]": twist,
-        "arc chord [m]": arc_chord,    # keep column name to match method spelling
-        "linear chord [m]": lin_chord, # consistent with code terminology
+        "arc chord [m]": arc_chord, 
         "LE x [m]": x_LE_list,
         "LE y [m]": y_LE_list,
         "TE x [m]": x_TE_list,
@@ -249,7 +244,7 @@ def run_single_CFM(CFM, root):
     blade_geo.set_CFM(CFM)
 
     # Run radial integration and collect results
-    delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, vd_vals, r_list = radial_integration(
+    delta_p, power, efficency, airfoil_perf_data_list, T_prime_vals, torque, r_list = radial_integration(
         blade_geo, airfoil_data
     )
 
@@ -260,7 +255,7 @@ def run_single_CFM(CFM, root):
     os.makedirs(root, exist_ok=True)
 
     # Spanwise performance plots and parameter save-out
-    plot_airfoil_perf_vs_r(airfoil_perf_data_list, T_prime_vals, vd_vals, r_list, root)
+    plot_airfoil_perf_vs_r(airfoil_perf_data_list, T_prime_vals, torque, r_list, root)
     save_fan_parameters(blade_geo, CFM, delta_p, efficency, root)
 
 

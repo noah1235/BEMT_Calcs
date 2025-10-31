@@ -61,21 +61,18 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
     T_prime_vals = []
     p_prime_vals = []
     Q_prime_vals = []
-    vd_list = []
     airfoil_perf_data_list = []
 
     # Loop over radial stations (kept in the same order)
     for r in blade_geo.r_vals:
-        T_prime, Q_prime, v_d, a, airfoil_perf_data = get_force_per_unit_length(r, blade_geo, airfoil_data)
+        T_prime, Q_prime, v_d, airfoil_perf_data = get_force_per_unit_length(r, blade_geo, airfoil_data)
         airfoil_perf_data_list.append(airfoil_perf_data)
         T_prime_vals.append(float(T_prime))
         Q_prime_vals.append(float(Q_prime))
         p_prime_vals.append(float(v_d*T_prime))
-        vd_list.append(float(a))
 
     T_prime_vals = np.array(T_prime_vals)
     Q_prime_vals = np.array(Q_prime_vals)
-    vd_list = np.array(vd_list)
 
     T = np.trapezoid(T_prime_vals, blade_geo.r_vals)
     Q = np.trapezoid(Q_prime_vals, blade_geo.r_vals)
@@ -84,8 +81,7 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
     avg_delta_p = calc_delta_p(T, blade_geo.hub_diameter, blade_geo.od)
     fan_power = Q * blade_geo.omega
     efficiency = (flow_power)/fan_power
-
-    return avg_delta_p, fan_power, efficiency, airfoil_perf_data_list, T_prime_vals, vd_list, blade_geo.r_vals
+    return avg_delta_p, fan_power, efficiency, airfoil_perf_data_list, T_prime_vals, Q_prime_vals * blade_geo.r_vals, blade_geo.r_vals
 
 def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
     """
@@ -164,7 +160,7 @@ def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data:
     Q_prime = blade_geo.B * (ct * 0.5 * rho * w**2 * c) * r
 
     # Diagnostics vector (kept as the same ordering/content)
-    return T_prime, Q_prime, vd, a, [
+    return T_prime, Q_prime, vd, [
         np.rad2deg(alpha),  # alpha in degrees
         cd,
         cl,

@@ -11,11 +11,11 @@ from SRC.Geometry.Blade_Geometry import Blade_Geometry
 # Thickness lower bound = thickness / thickness_lb_factor
 # ----------------------------------------------------------------------------
 thickness_lb_factor = 1.5
-
 # ----------------------------------------------------------------------------
 # Hard-coded final tip twist (radians)
 # ----------------------------------------------------------------------------
 FINAL_TIP_ANGLE = np.deg2rad(25)
+
 # ----------------------------------------------------------------------------
 # Scaling utilities
 # ----------------------------------------------------------------------------
@@ -166,7 +166,7 @@ def optimize_blade_spline(airfoil_data,
 # ----------------------------------------------------------------------------
 # Main entry
 # ----------------------------------------------------------------------------
-def run_opt():
+def run_optimization():
     df = load_all_polars("airfoil_data/Eppler E63")
     af_data = Airfoil_Data(df, Ncrit=9)
 
@@ -218,4 +218,4 @@ def run_opt():
     print("Optimized RPM:", int(res.RPM_opt))
 
 if __name__ == '__main__':
-    run_opt()
+    run_optimization()

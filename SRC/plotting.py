@@ -53,7 +53,7 @@ def startup(blade_geo, airfoil_data, root):
     fig.tight_layout()
     fig.savefig(os.path.join(root, "startup.png"))
 
-def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, save_path):
+def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, torque, r_vals, save_path):
     airfoil_perf_data = np.array(airfoil_perf_data)
     
     alpha_list = airfoil_perf_data[:, 0]
@@ -63,8 +63,7 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, sav
     ct_list = airfoil_perf_data[:, 4]
     phi_list = airfoil_perf_data[:, 5]
     Re_list = airfoil_perf_data[:, 6]
-    #chord_list = airfoil_perf_data[:, 7]
-    #phi_deg_list = np.rad2deg(phi_list)
+
 
     # Subsample the data
     num_samples = 20
@@ -98,13 +97,10 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, sav
     ax1.grid(True)
 
     # Cn and Ct together (shared y)
-    axes[2].plot(r_vals, cn_list, label="Cn")
-    #axes[2].plot(r_vals, cl_list*np.cos(phi_list), label="cl * cos(phi)")
-    #axes[2].plot(r_vals, cl_list*np.sin(phi_list), label="cl * sin(phi)")
-    axes[2].plot(r_vals, ct_list, label="Ct")
+    axes[2].plot(r_vals, cn_list, label="Thrust force coefficient")
+    axes[2].plot(r_vals, ct_list, label="Tangential force coefficient")
     axes[2].set_xlabel("Radius [m]")
     axes[2].set_ylabel("Force Coefficient")
-    axes[2].set_title("Cn and Ct vs Radius")
     axes[2].legend()
     axes[2].grid(True)
 
@@ -113,11 +109,11 @@ def plot_airfoil_perf_vs_r(airfoil_perf_data, T_prime_vals, vd_vals, r_vals, sav
     ax4 = ax3.twinx()
 
     p3, = ax3.plot(r_vals, T_prime_vals, color='tab:green', label="T'")
-    p4, = ax4.plot(r_vals, vd_vals, color='tab:purple', label="vd'")
+    p4, = ax4.plot(r_vals, torque, color='tab:purple', label="vd'")
 
     ax3.set_xlabel("Radius [m]")
-    ax3.set_ylabel("T'", color='tab:green')
-    ax4.set_ylabel("axial velocity'", color='tab:purple')
+    ax3.set_ylabel("Thrust per unit radius [N/m]", color='tab:green')
+    ax4.set_ylabel("Torque per unit radius [N]", color='tab:purple')
     ax3.set_title("T' and vd' vs Radius")
     ax3.tick_params(axis='y', labelcolor='tab:green')
     ax4.tick_params(axis='y', labelcolor='tab:purple')

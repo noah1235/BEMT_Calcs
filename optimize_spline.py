@@ -15,7 +15,7 @@ thickness_lb_factor = 1.5
 # ----------------------------------------------------------------------------
 # Hard-coded final tip twist (radians)
 # ----------------------------------------------------------------------------
-FINAL_TIP_ANGLE = np.deg2rad(22)
+FINAL_TIP_ANGLE = np.deg2rad(25)
 # ----------------------------------------------------------------------------
 # Scaling utilities
 # ----------------------------------------------------------------------------
@@ -180,7 +180,7 @@ def run_opt():
     dp_reg = (target_dp, 1e-1)      # (target, weight)
     RPM_reg = (1500.0, 0.0)        # (target, weight) 
 
-    n_spline_ctrl_pts_twist = 3
+    n_spline_ctrl_pts_twist = 4
     t0 = np.array([thickness/1.1, thickness/1.1, thickness/1.1])
     n_spline_ctrl_pts_t = t0.shape[0]
 

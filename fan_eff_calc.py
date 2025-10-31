@@ -17,13 +17,13 @@ hub_diameter = 0.085  # [m]
 thickness    = 0.025   # [m]
 od           = 0.20   # [m]
 Blades = 6
-RPM = 1333
+RPM = 1365
 
 # Twist (theta) control points (radians) for spline-based profile
-theta_ctrl = np.array([0.6727033,  0.48553873, 0.38397244])
+theta_ctrl = np.array([0.56812577, 0.4429515,  0.43633231])
 
 # Thickness control points (meters)
-t_ctrl = np.array([0.025,      0.02152978, 0.01923077])
+t_ctrl = np.array([0.015,      0.01806745, 0.0225])
 
 # Spanwise coordinates corresponding to control points (from hub to tip)
 r_ctrl_theta = np.linspace(hub_diameter / 2, od / 2, theta_ctrl.shape[0])

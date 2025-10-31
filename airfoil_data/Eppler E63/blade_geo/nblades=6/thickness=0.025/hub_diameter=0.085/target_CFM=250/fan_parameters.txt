@@ -6,12 +6,12 @@ Blades (B)      : 6
 Thickness [m]   : 0.025
 Hub Diameter [m]: 0.085
 Outer Diameter [m]: 0.2
-RPM             : 1333
-Set Angle [deg] : 38.54
-Tip Angle [deg] : 22.00
-Chord Root [m]  : 0.04558513607404703
-Chord Tip [m]   : 0.05498390081389703
+RPM             : 1365
+Set Angle [deg] : 32.55
+Tip Angle [deg] : 25.00
+Chord Root [m]  : 0.03134615265999977
+Chord Tip [m]   : 0.05783898046800158
 Target CFM      : 250
-delta p [Pa]    : 17.78
-efficiency      : 0.80
+delta p [Pa]    : 17.82
+efficiency      : 0.81
 

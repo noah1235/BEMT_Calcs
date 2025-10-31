@@ -1,10 +1,10 @@
 import numpy as np
-from read_xfoil_data import load_all_polars
+from SRC.read_xfoil_data import load_all_polars
 from SRC.Calculations.BEMT_Calcs import radial_integration
 from SRC.Calculations.Airfoil_Data import Airfoil_Data
 from SRC.Geometry.Blade_Geometry import Blade_Geometry
 from SRC.Geometry.profiles import SplineProfile
-from plotting import plot_airfoil_perf_vs_r, startup
+from SRC.plotting import plot_airfoil_perf_vs_r, startup
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -14,14 +14,16 @@ import pandas as pd
 # Blade geometry (inputs/controls)
 # -------------------------------
 hub_diameter = 0.085  # [m]
-thickness    = 0.02   # [m]
+thickness    = 0.025   # [m]
 od           = 0.20   # [m]
+Blades = 6
+RPM = 1333
 
 # Twist (theta) control points (radians) for spline-based profile
-theta_ctrl = np.array([0.74487614, 0.62895327, 0.34906585])
+theta_ctrl = np.array([0.6727033,  0.48553873, 0.38397244])
 
 # Thickness control points (meters)
-t_ctrl = np.array([0.02293189, 0.01923077, 0.01923077])
+t_ctrl = np.array([0.025,      0.02152978, 0.01923077])
 
 # Spanwise coordinates corresponding to control points (from hub to tip)
 r_ctrl_theta = np.linspace(hub_diameter / 2, od / 2, theta_ctrl.shape[0])
@@ -38,12 +40,12 @@ t_prof = SplineProfile(
 blade_geo = Blade_Geometry(
     airfoil_name="Eppler E63",
     Ncrit=9,
-    B=6,
+    B=Blades,
     thickness_prof=t_prof,
     max_t=thickness,
     hub_diameter=hub_diameter,
     od=od,
-    omega_rpm=1232,
+    omega_rpm=RPM,
     theta_prof=theta_prof,
     CFM=-1,  # will be set later before analysis
 )

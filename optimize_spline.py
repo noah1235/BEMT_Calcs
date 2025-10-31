@@ -1,17 +1,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, Bounds
-from read_xfoil_data import load_all_polars
-from SRC.Calculations.BEMT_Calcs import Airfoil_Data, radial_integration, estimate_dp
-from SRC.Geometry.geometry import Blade_Geometry, SplineTwistProfile, Linear_Prof
-from plotting import plot_airfoil_perf_vs_r
-
-thickness_lb_factor = 1.3
+from SRC.read_xfoil_data import load_all_polars
+from SRC.Calculations.BEMT_Calcs import radial_integration
+from SRC.Calculations.Airfoil_Data import Airfoil_Data
+from SRC.Calculations.estimte_delta_p import estimate_dp
+from SRC.Geometry.profiles import SplineProfile, Linear_Prof
+from SRC.Geometry.Blade_Geometry import Blade_Geometry
+# ----------------------------------------------------------------------------
+# Thickness lower bound = thickness / thickness_lb_factor
+# ----------------------------------------------------------------------------
+thickness_lb_factor = 1.5
 
 # ----------------------------------------------------------------------------
 # Hard-coded final tip twist (radians)
 # ----------------------------------------------------------------------------
-FINAL_TIP_ANGLE = np.deg2rad(20)
+FINAL_TIP_ANGLE = np.deg2rad(22)
 # ----------------------------------------------------------------------------
 # Scaling utilities
 # ----------------------------------------------------------------------------
@@ -49,9 +53,9 @@ def evaluate_performance(vars_raw, CFM, airfoil_data,
     theta_ctrl = np.concatenate([theta_raw, [final_tip_angle]])
 
     # build profiles (reuse spline class for thickness as well)
-    twist_prof = SplineTwistProfile(r_ctrl_twist, theta_ctrl,
+    twist_prof = SplineProfile(r_ctrl_twist, theta_ctrl,
                                     kind='pchip', extrapolate=True)
-    t_prof = SplineTwistProfile(r_ctrl_t, t_ctrl,
+    t_prof = SplineProfile(r_ctrl_t, t_ctrl,
                                 kind='pchip', extrapolate=True)
 
     blade = Blade_Geometry(
@@ -67,10 +71,7 @@ def evaluate_performance(vars_raw, CFM, airfoil_data,
         CFM=CFM
     )
 
-    dp, power, perf_list, *_ = radial_integration(blade, airfoil_data)
-    p_fluid = dp * blade.flow_rate
-    efficiency = p_fluid / power if power > 0 else 0.0
-
+    dp, power, efficiency, *_ = radial_integration(blade, airfoil_data)
     print(f"Δp={dp:.2f} Pa | Power={power:.2f} W | Eff={efficiency:.3f} | RPM={RPM:.0f}")
     return dp, power, efficiency
 
@@ -171,13 +172,13 @@ def run_opt():
 
     hub_d, od = 0.085, 0.20
     nblades = 6
-    thickness = 0.025
+    thickness = 0.0225
     CFM = 250
 
     target_dp = estimate_dp(CFM) * 1.25
     print(f"target delta p = {target_dp:.3f} Pa")
     dp_reg = (target_dp, 1e-1)      # (target, weight)
-    RPM_reg = (1500.0, 0.0)        # (target, weight) -> 0 disables RPM penalty
+    RPM_reg = (1500.0, 0.0)        # (target, weight) 
 
     n_spline_ctrl_pts_twist = 3
     t0 = np.array([thickness/1.1, thickness/1.1, thickness/1.1])
@@ -192,8 +193,6 @@ def run_opt():
     th0 = np.zeros(n_spline_ctrl_pts_twist - 1)
     for i, r in enumerate(r_ctrl_twist[:-1]):
         th0[i] = theta_prof_init(r)
-
-    # initial thickness controls within [0, thickness]
 
 
     theta_lb, theta_ub = FINAL_TIP_ANGLE, np.deg2rad(50)

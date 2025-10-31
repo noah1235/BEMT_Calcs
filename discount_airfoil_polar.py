@@ -145,13 +145,14 @@ def process_polar(file_path, cl_scale, cd_scale, scale_cdp, new_re):
 
 
 def main():
-    # ======= USER SETTINGS =======
+    # ======= SETTINGS =======
+    #only scales positive lift coefficients
     folder = pathlib.Path("airfoil_data/Eppler E63")
-    src_re = 50000.0          # keep as float; filenames may encode decimals
+    src_re = 50000.0      
     src_ncrit = 9
-    new_re = 1e4              # will be formatted nicely with :g below
+    new_re = 1e4            
 
-    cl_scale = 0.6            # 10% less lift
+    cl_scale = 0.5         
     cd_cl_scale = 0.5
     cd_scale = cl_scale / cd_cl_scale
     scale_cdp = False         # also scale CDp

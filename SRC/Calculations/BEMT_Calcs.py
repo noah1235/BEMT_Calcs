@@ -85,8 +85,6 @@ def radial_integration(blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
     fan_power = Q * blade_geo.omega
     efficiency = (flow_power)/fan_power
 
-    #print(flow_power, blade_geo.flow_rate * avg_delta_p)
-
     return avg_delta_p, fan_power, efficiency, airfoil_perf_data_list, T_prime_vals, vd_list, blade_geo.r_vals
 
 def get_force_per_unit_length(r: float, blade_geo: Blade_Geometry, airfoil_data: Airfoil_Data):
